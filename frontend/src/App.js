@@ -1,27 +1,55 @@
 import { useState, useEffect, useCallback } from "react";
-import { FONT, C } from "./constants/theme";
+import { FONT } from "./constants/theme";
 import { S } from "./constants/styles";
-import { DB, uid } from "./constants/db";
+import { DB } from "./constants/db";
 import { NAV } from "./constants/config";
+import { ThemeProvider, useTheme } from "./constants/ThemeContext";
 import Auth from "./components/Auth/Auth";
 import Dashboard from "./components/Pages/Dashboard";
 import ItemsPage from "./components/Pages/ItemsPage";
 import HistoryPage from "./components/Pages/HistoryPage";
+import MessagesPage from "./components/Pages/MessagesPage";
 import NotificationsPage from "./components/Pages/NotificationsPage";
 import AdminPage from "./components/Pages/AdminPage";
+import AccountProfile from "./components/Pages/AccountProfile";
 
-export default function App() {
+function AppContent() {
+  const { theme, setTheme, colors: C } = useTheme();
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("dashboard");
   const [unread, setUnread] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [showAccountProfile, setShowAccountProfile] = useState(false);
 
   const refreshUnread = useCallback(() => {
-    if (user) setUnread(DB.notifications.filter(n => n.user_id === user.id && !n.read).length);
+    if (user) {
+      const unreadNotifs = DB.notifications.filter(n => n.user_id === user.id && !n.read).length;
+      const unreadMsgs = DB.messages.filter(m => m.receiver_id === user.id && !m.read).length;
+      setUnread(unreadNotifs);
+      setUnreadMessages(unreadMsgs);
+    }
   }, [user]);
+
+  const handleUpdateUser = (updatedUser) => {
+    setUser(updatedUser);
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+  };
+
+  // Load user from localStorage on mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        localStorage.removeItem("user");
+      }
+    }
+  }, []);
 
   useEffect(() => { refreshUnread(); }, [user, refreshUnread]);
 
-  if (!user) return <Auth onLogin={(u) => { setUser(u); refreshUnread(); }} />;
+  if (!user) return <Auth onLogin={(u) => { setUser(u); localStorage.setItem("user", JSON.stringify(u)); refreshUnread(); }} />;
 
   const navItems = NAV.filter(n => !n.adminOnly || user.is_admin);
 
@@ -36,24 +64,67 @@ export default function App() {
         </div>
         <nav style={{ flex: 1, padding: "12px 0", overflowY: "auto" }}>
           {navItems.map(n => (
-            <div key={n.id} style={S.navItem(page === n.id)} onClick={() => { setPage(n.id); if (n.id === "notifications") setTimeout(refreshUnread, 300); }}>
+            <div key={n.id} style={S.navItem(page === n.id)} onClick={() => { setPage(n.id); if (n.id === "notifications" || n.id === "messages") setTimeout(refreshUnread, 300); }}>
               <span style={{ fontSize: 16 }}>{n.icon}</span>
               <span>{n.label}</span>
               {n.id === "notifications" && unread > 0 && <span style={{ marginLeft: "auto", background: C.red, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{unread}</span>}
+              {n.id === "messages" && unreadMessages > 0 && <span style={{ marginLeft: "auto", background: C.red, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{unreadMessages}</span>}
             </div>
           ))}
         </nav>
         <div style={{ padding: "16px 20px", borderTop: `1px solid ${C.border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              marginBottom: 12,
+              padding: "10px 12px",
+              background: `${C.accent}15`,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              color: C.text,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => e.target.style.background = `${C.accent}25`}
+            onMouseLeave={(e) => e.target.style.background = `${C.accent}15`}
+          >
+            {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+          </button>
+          <button 
+            onClick={() => setShowAccountProfile(true)}
+            style={{ 
+              width: "100%",
+              display: "flex",
+              alignItems: "center", 
+              gap: 10, 
+              marginBottom: 12,
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: "8px",
+              borderRadius: 8,
+              transition: "background 0.2s ease",
+            }}
+            onMouseEnter={(e) => e.target.style.background = `${C.border}40`}
+            onMouseLeave={(e) => e.target.style.background = "transparent"}
+          >
             <div style={{ width: 34, height: 34, borderRadius: "50%", background: `${C.accent}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: C.accentGlow }}>
               {user.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
             </div>
-            <div>
+            <div style={{ flex: 1, textAlign: "left" }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{user.name}</div>
               <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'JetBrains Mono', monospace" }}>{user.uni_id}</div>
             </div>
-          </div>
-          <button style={{ ...S.btn("ghost"), width: "100%", fontSize: 12 }} onClick={() => setUser(null)}>Sign Out</button>
+            <span style={{ fontSize: 12, color: C.textMuted }}>👤</span>
+          </button>
+          <button style={{ ...S.btn("ghost"), width: "100%", fontSize: 12 }} onClick={() => { setUser(null); localStorage.removeItem("user"); }}>Sign Out</button>
         </div>
       </div>
       {/* Main */}
@@ -62,9 +133,27 @@ export default function App() {
         {page === "items" && <ItemsPage key="all" user={user} filter="all" />}
         {page === "mine" && <ItemsPage key="mine" user={user} filter="mine" />}
         {page === "history" && <HistoryPage user={user} />}
+        {page === "messages" && <MessagesPage user={user} />}
         {page === "notifications" && <NotificationsPage user={user} onRead={refreshUnread} />}
         {page === "admin" && <AdminPage user={user} />}
       </div>
+
+      {/* Account Profile Modal */}
+      {showAccountProfile && (
+        <AccountProfile 
+          user={user} 
+          onClose={() => setShowAccountProfile(false)}
+          onUpdate={handleUpdateUser}
+        />
+      )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
   );
 }

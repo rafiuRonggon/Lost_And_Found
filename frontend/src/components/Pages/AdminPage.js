@@ -1,8 +1,9 @@
-import { C } from "../../constants/theme";
 import { S } from "../../constants/styles";
 import { DB } from "../../constants/db";
+import { useTheme } from "../../constants/ThemeContext";
 
 function AdminPage({ user }) {
+  const { theme, colors: C } = useTheme();
   if (!user.is_admin) return <div style={{ color: C.textMuted, padding: 40 }}>Access denied.</div>;
   
   return (
@@ -20,7 +21,7 @@ function AdminPage({ user }) {
                 <td style={{ padding: "10px 12px" }}><span style={S.tag}>{u.uni_id}</span></td>
                 <td style={{ padding: "10px 12px", color: C.textSub }}>{u.email}</td>
                 <td style={{ padding: "10px 12px", color: C.textMuted }}>{u.join_date}</td>
-                <td style={{ padding: "10px 12px" }}><span style={S.badge(u.is_admin ? C.purple : C.teal, u.is_admin ? "#12091A" : "#091A18")}>{u.is_admin ? "Admin" : "Student"}</span></td>
+                <td style={{ padding: "10px 12px" }}><span style={S.badge(u.is_admin ? C.purple : C.teal, u.is_admin ? (theme === "dark" ? "#12091A" : "#F3E8FF") : (theme === "dark" ? "#091A18" : "#ECFDF5"))}>{u.is_admin ? "Admin" : "Student"}</span></td>
               </tr>
             ))}</tbody>
           </table>
@@ -38,7 +39,7 @@ function AdminPage({ user }) {
                   <td style={{ padding: "10px 12px", fontWeight: 500 }}>{claimer?.name || "—"}</td>
                   <td style={{ padding: "10px 12px", color: C.textSub }}>{item?.title || "Deleted"}</td>
                   <td style={{ padding: "10px 12px", color: C.textMuted }}>{c.date}</td>
-                  <td style={{ padding: "10px 12px" }}><span style={S.badge(C.green, "#0A1A10")}>{c.status}</span></td>
+                  <td style={{ padding: "10px 12px" }}><span style={S.badge(C.green, theme === "dark" ? "#0A1A10" : "#DCFCE7")}>{c.status}</span></td>
                 </tr>
               );
             })}</tbody>

@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { C } from "../../constants/theme";
 import { S } from "../../constants/styles";
 import { DB } from "../../constants/db";
+import { useTheme } from "../../constants/ThemeContext";
 
 function NotificationsPage({ user, onRead }) {
+  const { colors: C } = useTheme();
   const [notifs, setNotifs] = useState([]);
   useEffect(() => {
     setNotifs(DB.notifications.filter(n => n.user_id === user.id).sort((a, b) => b.date.localeCompare(a.date)));

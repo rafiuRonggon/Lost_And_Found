@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { C, FONT } from "../../constants/theme";
+import { FONT } from "../../constants/theme";
 import { S } from "../../constants/styles";
 import { DB, uid } from "../../constants/db";
+import { useTheme } from "../../constants/ThemeContext";
 
 function Auth({ onLogin }) {
+  const { colors: C } = useTheme();
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({ name: "", uni_id: "", email: "", password: "" });
   const [error, setError] = useState("");
@@ -33,7 +35,7 @@ function Auth({ onLogin }) {
           <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.5px" }}>Lost & Found</div>
           <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>University Portal</div>
         </div>
-        <div style={{ display: "flex", background: "#0D1421", borderRadius: 10, padding: 4, marginBottom: 24 }}>
+        <div style={{ display: "flex", background: C.surface, borderRadius: 10, padding: 4, marginBottom: 24 }}>
           {["login", "signup"].map(m => <button key={m} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "'Sora', sans-serif", fontWeight: 600, fontSize: 13, background: mode === m ? C.accent : "transparent", color: mode === m ? "#fff" : C.textMuted, transition: "all 0.15s", textTransform: "capitalize" }} onClick={() => { setMode(m); setError(""); }}>{m}</button>)}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -43,10 +45,10 @@ function Auth({ onLogin }) {
           </>}
           <div><label style={S.label}>Email</label><input style={S.input} type="email" placeholder="you@uni.edu" value={form.email} onChange={set("email")} /></div>
           <div><label style={S.label}>Password</label><input style={S.input} type="password" placeholder="••••••••" value={form.password} onChange={set("password")} /></div>
-          {error && <div style={{ fontSize: 12, color: C.red, background: "#1A0A0A", border: `1px solid ${C.red}30`, borderRadius: 8, padding: "8px 12px" }}>⚠️ {error}</div>}
+          {error && <div style={{ fontSize: 12, color: C.red, background: C.theme === "dark" ? "#1A0A0A" : "#FEE2E2", border: `1px solid ${C.red}30`, borderRadius: 8, padding: "8px 12px" }}>⚠️ {error}</div>}
           <button style={{ ...S.btn(), width: "100%", padding: "12px 0", fontSize: 14, marginTop: 4 }} onClick={handleSubmit}>{mode === "login" ? "Sign In" : "Create Account"}</button>
         </div>
-        {mode === "login" && <div style={{ marginTop: 20, padding: "14px", background: "#0D1421", borderRadius: 10, fontSize: 12, color: C.textMuted }}>
+        {mode === "login" && <div style={{ marginTop: 20, padding: "14px", background: C.surface, borderRadius: 10, fontSize: 12, color: C.textMuted }}>
           <div style={{ fontWeight: 600, marginBottom: 6, color: C.textSub }}>Demo accounts:</div>
           <div>admin@uni.edu / admin123 (Admin)</div>
           <div>sarah@uni.edu / pass123</div>

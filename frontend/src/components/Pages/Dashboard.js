@@ -1,14 +1,21 @@
-import { C, STATUS_CONFIG } from "../../constants/theme";
 import { S } from "../../constants/styles";
 import { DB } from "../../constants/db";
+import { useTheme } from "../../constants/ThemeContext";
 
 function Dashboard({ user }) {
+  const { colors: C, statusConfig: STATUS_CONFIG } = useTheme();
   const myItems = DB.items.filter(i => i.posted_by === user.id);
   const myClaims = DB.claims.filter(c => c.claimer_id === user.id);
   const lostCount = DB.items.filter(i => i.status === "lost").length;
   const foundCount = DB.items.filter(i => i.status === "found").length;
   const claimedCount = DB.items.filter(i => i.status === "claimed").length;
-  const recentItems = DB.items.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+  const statusPriority = { lost: 0, found: 1, claimed: 2 };
+  const recentItems = DB.items.slice().sort((a, b) => {
+    if (statusPriority[a.status] !== statusPriority[b.status]) {
+      return statusPriority[a.status] - statusPriority[b.status];
+    }
+    return b.date.localeCompare(a.date);
+  }).slice(0, 3);
 
   return (
     <div>
@@ -36,7 +43,7 @@ function Dashboard({ user }) {
             {recentItems.map(item => {
               const cfg = STATUS_CONFIG[item.status];
               return (
-                <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#0D1421", borderRadius: 10, border: `1px solid ${C.border}` }}>
+                <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: C.surface, borderRadius: 10, border: `1px solid ${C.border}` }}>
                   <span style={{ fontSize: 22 }}>{item.image}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{item.title}</div>
