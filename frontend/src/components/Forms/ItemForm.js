@@ -5,7 +5,7 @@ import { CATEGORIES } from "../../constants/categories";
 
 function ItemForm({ initial = {}, onSave, onCancel }) {
   const { colors: C } = useTheme();
-  const [form, setForm] = useState({ title: "", description: "", location: "", status: "lost", image: "📦", category: "other", tags: [], ...initial });
+  const [form, setForm] = useState({ title: "", description: "", location: "", status: "lost", image_emoji: "📦", category: "other", tags: [], ...initial });
   const [newTag, setNewTag] = useState("");
   const emojis = ["📦", "🎒", "🪪", "⌚", "📱", "💻", "🔑", "👜", "📚", "☂️", "🧮", "👓", "🎧", "💳"];
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -29,7 +29,7 @@ function ItemForm({ initial = {}, onSave, onCancel }) {
       <div>
         <label style={S.label}>Icon</label>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {emojis.map(e => <button key={e} onClick={() => setForm(f => ({ ...f, image: e }))} style={{ fontSize: 20, background: form.image === e ? `${C.accent}30` : C.surface, border: `1px solid ${form.image === e ? C.accent : C.border}`, borderRadius: 8, padding: "4px 8px", cursor: "pointer" }}>{e}</button>)}
+          {emojis.map(e => <button key={e} onClick={() => setForm(f => ({ ...f, image_emoji: e }))} style={{ fontSize: 20, background: form.image_emoji === e ? `${C.accent}30` : C.surface, border: `1px solid ${form.image_emoji === e ? C.accent : C.border}`, borderRadius: 8, padding: "4px 8px", cursor: "pointer" }}>{e}</button>)}
         </div>
       </div>
       {[["title", "Item Title"], ["location", "Location Found/Lost"]].map(([k, lbl]) => (

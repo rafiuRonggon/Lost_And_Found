@@ -1,5 +1,8 @@
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
+const WebSocket = require('ws');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 // Import database connection
@@ -30,7 +33,7 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
-// ─── Get All Users (Example endpoint) ───────────────────────────────────────
+// ─── Get All Users ────────────────────────────────────────────────────────────
 app.get('/api/users', async (req, res) => {
   try {
     const connection = await pool.getConnection();
@@ -42,7 +45,75 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// ─── Get All Items (Example endpoint) ───────────────────────────────────────
+// ─── Login Route ───────────────────────────────────────────────────────────────
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const connection = await pool.getConnection();
+    const [users] = await connection.query('SELECT id, name, email, password, is_admin, join_date FROM users WHERE email = ?', [email]);
+    connection.release();
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const user = users[0];
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Return user data without password
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      is_admin: user.is_admin,
+      join_date: user.join_date
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Login failed', message: error.message });
+  }
+});
+
+// ─── Create New User ───────────────────────────────────────────────────────────
+app.post('/api/users', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Missing required fields: name, email, password' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const connection = await pool.getConnection();
+    const [result] = await connection.query(
+      'INSERT INTO users (name, email, password, is_admin) VALUES (?, ?, ?, FALSE)',
+      [name, email, hashedPassword]
+    );
+    connection.release();
+    
+    res.status(201).json({ 
+      id: result.insertId,
+      name,
+      email,
+      is_admin: false,
+      join_date: new Date()
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create user', message: error.message });
+  }
+});
+
+// ─── Get All Items ────────────────────────────────────────────────────────────
 app.get('/api/items', async (req, res) => {
   try {
     const connection = await pool.getConnection();
@@ -56,6 +127,67 @@ app.get('/api/items', async (req, res) => {
     res.json(items);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch items', message: error.message });
+  }
+});
+
+// ─── Create New Item ───────────────────────────────────────────────────────────
+app.post('/api/items', async (req, res) => {
+  try {
+    const { title, description, location, status, category, tags, posted_by, image_emoji } = req.body;
+    
+    console.log('📦 POST /api/items received:', { title, description, location, status, category, tags, posted_by, image_emoji });
+    
+    if (!title || !location || !posted_by) {
+      return res.status(400).json({ error: 'Missing required fields: title, location, posted_by' });
+    }
+
+    const connection = await pool.getConnection();
+    const tagsJson = tags ? JSON.stringify(tags) : JSON.stringify([]);
+    const [result] = await connection.query(
+      'INSERT INTO items (title, description, location, status, category, tags, posted_by, image_emoji) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [title, description || null, location, status || 'lost', category || 'other', tagsJson, posted_by, image_emoji || '📦']
+    );
+    connection.release();
+    
+    const newItem = {
+      id: result.insertId,
+      title,
+      description,
+      location,
+      status: status || 'lost',
+      category: category || 'other',
+      tags: tags || [],
+      posted_by,
+      posted_by_name: 'Admin User', // TODO: fetch actual user name
+      image_emoji: image_emoji || '📦',
+      date_posted: new Date()
+    };
+    
+    // Broadcast to all WebSocket clients
+    broadcast('item_created', newItem);
+    
+    res.status(201).json(newItem);
+  } catch (error) {
+    console.error('❌ POST /api/items error:', error);
+    res.status(500).json({ error: 'Failed to create item', message: error.message });
+  }
+});
+
+// ─── Delete Item ──────────────────────────────────────────────────────────────
+app.delete('/api/items/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const connection = await pool.getConnection();
+    const [result] = await connection.query('DELETE FROM items WHERE id = ?', [id]);
+    connection.release();
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    res.json({ message: 'Item deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete item', message: error.message });
   }
 });
 
@@ -134,13 +266,18 @@ app.post('/api/comments', async (req, res) => {
     );
     connection.release();
     
-    res.status(201).json({ 
+    const newComment = {
       id: result.insertId, 
       item_id, 
       user_id, 
       comment_text, 
       created_at: new Date() 
-    });
+    };
+
+    // Broadcast comment creation to all connected clients
+    broadcast('comment_created', newComment);
+    
+    res.status(201).json(newComment);
   } catch (error) {
     res.status(500).json({ error: 'Failed to post comment', message: error.message });
   }
@@ -235,14 +372,19 @@ app.post('/api/messages', async (req, res) => {
     );
     connection.release();
     
-    res.status(201).json({ 
+    const newMessage = {
       id: result.insertId, 
       sender_id, 
       receiver_id, 
       message_text, 
       item_id: item_id || null,
       created_at: new Date() 
-    });
+    };
+
+    // Broadcast message creation to all connected clients
+    broadcast('message_created', newMessage);
+    
+    res.status(201).json(newMessage);
   } catch (error) {
     res.status(500).json({ error: 'Failed to send message', message: error.message });
   }
@@ -269,6 +411,72 @@ app.put('/api/messages/:id/read', async (req, res) => {
   }
 });
 
+// ─── Claims Endpoints ──────────────────────────────────────────────────────────
+
+// Create a new claim
+app.post('/api/claims', async (req, res) => {
+  try {
+    const { claimer_id, item_id } = req.body;
+    
+    if (!claimer_id || !item_id) {
+      return res.status(400).json({ error: 'Missing required fields: claimer_id, item_id' });
+    }
+
+    const connection = await pool.getConnection();
+    const [result] = await connection.query(
+      'INSERT INTO claims (claimer_id, item_id) VALUES (?, ?)',
+      [claimer_id, item_id]
+    );
+    connection.release();
+    
+    const newClaim = {
+      claim_id: result.insertId,
+      claimer_id,
+      item_id,
+      claim_date: new Date()
+    };
+
+    // Broadcast claim creation to all connected clients
+    broadcast('claim_created', newClaim);
+    
+    res.status(201).json(newClaim);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create claim', message: error.message });
+  }
+});
+
+// Get claims for a specific item
+app.get('/api/claims/item/:item_id', async (req, res) => {
+  try {
+    const { item_id } = req.params;
+    const connection = await pool.getConnection();
+    const [claims] = await connection.query(
+      'SELECT c.*, u.name as claimer_name FROM claims c LEFT JOIN users u ON c.claimer_id = u.id WHERE c.item_id = ?',
+      [item_id]
+    );
+    connection.release();
+    res.json(claims);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch claims', message: error.message });
+  }
+});
+
+// Get claims by user
+app.get('/api/claims/user/:user_id', async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const connection = await pool.getConnection();
+    const [claims] = await connection.query(
+      'SELECT c.*, i.title as item_title FROM claims c LEFT JOIN items i ON c.item_id = i.id WHERE c.claimer_id = ?',
+      [user_id]
+    );
+    connection.release();
+    res.json(claims);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch user claims', message: error.message });
+  }
+});
+
 // ─── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found', path: req.path });
@@ -280,18 +488,56 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
+// ─── WebSocket Setup ──────────────────────────────────────────────────────────
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+// Store connected clients
+const clients = new Set();
+
+// Broadcast function to send updates to all connected clients
+const broadcast = (event, data) => {
+  clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ event, data }));
+    }
+  });
+};
+
+// WebSocket connection handler
+wss.on('connection', (ws) => {
+  console.log('✓ WebSocket client connected');
+  clients.add(ws);
+
+  ws.on('close', () => {
+    console.log('✓ WebSocket client disconnected');
+    clients.delete(ws);
+  });
+
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
+  });
+});
+
 // ─── Start Server ──────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`\n🚀 Lost & Found Backend Server`);
   console.log(`📍 Running on http://localhost:${PORT}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🔌 WebSocket server running on ws://localhost:${PORT}`);
   console.log(`\nAvailable endpoints:`);
   console.log(`  GET  /api/health      - Server health check`);
   console.log(`  GET  /api/db-test     - Database connection test`);
   console.log(`  GET  /api/users       - Get all users`);
+  console.log(`  POST /api/users       - Create a new user`);
   console.log(`  GET  /api/items       - Get all items`);
+  console.log(`  POST /api/items       - Create a new item`);
+  console.log(`  DELETE /api/items/:id - Delete an item`);
   console.log(`  GET  /api/items/category/:category - Get items by category`);
   console.log(`  GET  /api/items/search/tags/:tag - Search items by tag`);
+  console.log(`  POST /api/claims      - Create a new claim`);
+  console.log(`  GET  /api/claims/item/:item_id - Get claims for an item`);
+  console.log(`  GET  /api/claims/user/:user_id - Get claims by user`);
   console.log(`  GET  /api/comments/:item_id  - Get comments for an item`);
   console.log(`  POST /api/comments    - Post a new comment`);
   console.log(`  DELETE /api/comments/:id - Delete a comment`);

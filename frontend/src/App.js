@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { FONT } from "./constants/theme";
 import { S } from "./constants/styles";
-import { DB } from "./constants/db";
 import { NAV } from "./constants/config";
 import { ThemeProvider, useTheme } from "./constants/ThemeContext";
 import Auth from "./components/Auth/Auth";
@@ -12,6 +11,7 @@ import MessagesPage from "./components/Pages/MessagesPage";
 import NotificationsPage from "./components/Pages/NotificationsPage";
 import AdminPage from "./components/Pages/AdminPage";
 import AccountProfile from "./components/Pages/AccountProfile";
+import { initWebSocket, closeWebSocket } from "./utils/websocket";
 
 function AppContent() {
   const { theme, setTheme, colors: C } = useTheme();
@@ -21,12 +21,22 @@ function AppContent() {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [showAccountProfile, setShowAccountProfile] = useState(false);
 
+  // Initialize WebSocket on mount
+  useEffect(() => {
+    if (user) {
+      initWebSocket()
+        .then(() => console.log('✓ WebSocket initialized'))
+        .catch(error => console.error('✗ WebSocket initialization failed:', error));
+
+      return () => closeWebSocket();
+    }
+  }, [user]);
+
   const refreshUnread = useCallback(() => {
     if (user) {
-      const unreadNotifs = DB.notifications.filter(n => n.user_id === user.id && !n.read).length;
-      const unreadMsgs = DB.messages.filter(m => m.receiver_id === user.id && !m.read).length;
-      setUnread(unreadNotifs);
-      setUnreadMessages(unreadMsgs);
+      // TODO: Fetch unread notifications and messages from API
+      setUnread(0);
+      setUnreadMessages(0);
     }
   }, [user]);
 

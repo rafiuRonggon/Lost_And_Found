@@ -1,28 +1,61 @@
 import { useState } from "react";
 import { FONT } from "../../constants/theme";
 import { S } from "../../constants/styles";
-import { DB, uid } from "../../constants/db";
 import { useTheme } from "../../constants/ThemeContext";
+import { usersAPI } from "../../utils/api";
 
 function Auth({ onLogin }) {
   const { colors: C } = useTheme();
   const [mode, setMode] = useState("login");
-  const [form, setForm] = useState({ name: "", uni_id: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setError("");
-    if (mode === "login") {
-      const user = DB.users.find(u => u.email === form.email && u.password === form.password);
-      if (!user) { setError("Invalid email or password."); return; }
-      onLogin(user);
-    } else {
-      if (!form.name || !form.uni_id || !form.email || !form.password) { setError("All fields required."); return; }
-      if (DB.users.find(u => u.email === form.email)) { setError("Email already registered."); return; }
-      const user = { id: uid(), name: form.name, uni_id: form.uni_id, email: form.email, password: form.password, join_date: new Date().toISOString().split("T")[0], is_admin: false };
-      DB.users.push(user);
-      onLogin(user);
+    setLoading(true);
+    try {
+      if (mode === "login") {
+        // Call the login endpoint
+        const response = await fetch('http://localhost:5000/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: form.email, password: form.password })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          setError(errorData.error || "Login failed");
+          setLoading(false);
+          return;
+        }
+        
+        const user = await response.json();
+        onLogin(user);
+      } else {
+        if (!form.name || !form.email || !form.password) { 
+          setError("All fields required."); 
+          setLoading(false);
+          return; 
+        }
+        try {
+          const newUser = await usersAPI.create({
+            name: form.name,
+            email: form.email,
+            password: form.password
+          });
+          onLogin(newUser);
+        } catch (err) {
+          setError(err.message || "Email already registered or invalid input.");
+          setLoading(false);
+        }
+      }
+    } catch (err) {
+      setError("Authentication failed. Please try again.");
+      console.error('Auth error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -41,18 +74,15 @@ function Auth({ onLogin }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {mode === "signup" && <>
             <div><label style={S.label}>Full Name</label><input style={S.input} placeholder="Your full name" value={form.name} onChange={set("name")} /></div>
-            <div><label style={S.label}>University ID</label><input style={S.input} placeholder="e.g. STU-2024" value={form.uni_id} onChange={set("uni_id")} /></div>
           </>}
           <div><label style={S.label}>Email</label><input style={S.input} type="email" placeholder="you@uni.edu" value={form.email} onChange={set("email")} /></div>
           <div><label style={S.label}>Password</label><input style={S.input} type="password" placeholder="••••••••" value={form.password} onChange={set("password")} /></div>
           {error && <div style={{ fontSize: 12, color: C.red, background: C.theme === "dark" ? "#1A0A0A" : "#FEE2E2", border: `1px solid ${C.red}30`, borderRadius: 8, padding: "8px 12px" }}>⚠️ {error}</div>}
-          <button style={{ ...S.btn(), width: "100%", padding: "12px 0", fontSize: 14, marginTop: 4 }} onClick={handleSubmit}>{mode === "login" ? "Sign In" : "Create Account"}</button>
+          <button style={{ ...S.btn(), width: "100%", padding: "12px 0", fontSize: 14, marginTop: 4 }} onClick={handleSubmit} disabled={loading}>{loading ? "Loading..." : mode === "login" ? "Sign In" : "Create Account"}</button>
         </div>
         {mode === "login" && <div style={{ marginTop: 20, padding: "14px", background: C.surface, borderRadius: 10, fontSize: 12, color: C.textMuted }}>
-          <div style={{ fontWeight: 600, marginBottom: 6, color: C.textSub }}>Demo accounts:</div>
-          <div>admin@uni.edu / admin123 (Admin)</div>
-          <div>sarah@uni.edu / pass123</div>
-          <div>rahul@uni.edu / pass123</div>
+          <div style={{ fontWeight: 600, marginBottom: 6, color: C.textSub }}>Demo Account:</div>
+          <div>admin@uni.edu / password123 (Admin)</div>
         </div>}
       </div>
     </div>

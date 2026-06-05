@@ -1,38 +1,73 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { S } from "../../constants/styles";
-import { DB, uid } from "../../constants/db";
 import { useTheme } from "../../constants/ThemeContext";
+import { commentsAPI, usersAPI } from "../../utils/api";
+import { onWebSocketEvent, removeWebSocketListener } from "../../utils/websocket";
 
 function Comments({ itemId, currentUser }) {
   const { colors: C } = useTheme();
+  const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [showComments, setShowComments] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [userMap, setUserMap] = useState({});
 
-  // Get all comments for this item
-  const itemComments = DB.comments.filter(c => c.item_id === itemId);
+  // Fetch comments and users on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [commentsData, usersData] = await Promise.all([
+          commentsAPI.getByItem(itemId),
+          usersAPI.getAll()
+        ]);
+        setComments(commentsData);
+        // Create user map for quick lookup
+        const map = {};
+        usersData.forEach(u => map[u.id] = u);
+        setUserMap(map);
+      } catch (error) {
+        console.error('Failed to fetch comments:', error);
+      }
+    };
+    fetchData();
+  }, [itemId]);
 
-  const handleAddComment = () => {
+  // Listen for new comments
+  useEffect(() => {
+    const handleCommentCreated = (data) => {
+      if (data.item_id === itemId) {
+        setComments(prev => [...prev, data]);
+      }
+    };
+    onWebSocketEvent('comment_created', handleCommentCreated);
+    return () => removeWebSocketListener('comment_created', handleCommentCreated);
+  }, [itemId]);
+
+  const handleAddComment = async () => {
     if (newComment.trim()) {
-      const now = new Date();
-      DB.comments.push({
-        id: uid(),
-        item_id: itemId,
-        user_id: currentUser.id,
-        comment_text: newComment,
-        date: now.toISOString().split("T")[0],
-        timestamp: now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-      });
-      setNewComment("");
+      setLoading(true);
+      try {
+        await commentsAPI.create({
+          item_id: itemId,
+          user_id: currentUser.id,
+          comment_text: newComment
+        });
+        setNewComment("");
+      } catch (error) {
+        console.error('Failed to post comment:', error);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const handleDeleteComment = (commentId) => {
-    const idx = DB.comments.findIndex(c => c.id === commentId);
-    if (idx !== -1) DB.comments.splice(idx, 1);
-  };
-
-  const getCommentUser = (userId) => {
-    return DB.users.find(u => u.id === userId) || { name: "Unknown User" };
+  const handleDeleteComment = async (commentId) => {
+    try {
+      await commentsAPI.delete(commentId);
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    } catch (error) {
+      console.error('Failed to delete comment:', error);
+    }
   };
 
   return (
@@ -51,7 +86,7 @@ function Comments({ itemId, currentUser }) {
         }}
         onClick={() => setShowComments(!showComments)}
       >
-        💬 {itemComments.length} {itemComments.length === 1 ? "Comment" : "Comments"}
+        💬 {comments.length} {comments.length === 1 ? "Comment" : "Comments"}
       </button>
 
       {/* Comments Section */}
@@ -72,27 +107,27 @@ function Comments({ itemId, currentUser }) {
             />
             <button
               onClick={handleAddComment}
-              disabled={!newComment.trim()}
+              disabled={!newComment.trim() || loading}
               style={{
                 ...S.btn("primary"),
                 marginTop: 8,
-                opacity: newComment.trim() ? 1 : 0.5,
-                cursor: newComment.trim() ? "pointer" : "not-allowed"
+                opacity: newComment.trim() && !loading ? 1 : 0.5,
+                cursor: newComment.trim() && !loading ? "pointer" : "not-allowed"
               }}
             >
-              Post Comment
+              {loading ? "Posting..." : "Post Comment"}
             </button>
           </div>
 
           {/* Comments List */}
           <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-            {itemComments.length === 0 ? (
+            {comments.length === 0 ? (
               <div style={{ fontSize: 12, color: C.textMuted, textAlign: "center", padding: 12 }}>
                 No comments yet. Be the first to comment!
               </div>
             ) : (
-              itemComments.map(comment => {
-                const commentUser = getCommentUser(comment.user_id);
+              comments.map(comment => {
+                const commentUser = userMap[comment.user_id] || { name: "Unknown User" };
                 const isCommentOwner = currentUser.id === comment.user_id;
 
                 return (
@@ -112,7 +147,7 @@ function Comments({ itemId, currentUser }) {
                           {commentUser.name}
                         </div>
                         <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 6 }}>
-                          {comment.date} at {comment.timestamp}
+                          {comment.created_at ? new Date(comment.created_at).toLocaleString() : "Unknown time"}
                         </div>
                         <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>
                           {comment.comment_text}

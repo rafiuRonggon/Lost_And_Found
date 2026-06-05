@@ -80,11 +80,9 @@ CREATE TABLE messages (
     INDEX idx_receiver (receiver_id)
 );
 
--- Insert demo data
+-- Insert admin user only
 INSERT INTO users (name, email, password, is_admin) VALUES
-('Admin User', 'admin@uni.edu', '$2y$10$hashedpassword', TRUE),
-('Sarah Lee', 'sarah@uni.edu', '$2y$10$hashedpassword', FALSE),
-('Rahul Kumar', 'rahul@uni.edu', '$2y$10$hashedpassword', FALSE);
+('Admin User', 'admin@uni.edu', '$2a$10$0XvqUh.mhdSTN9GWjXN/4u7NGsoyAXo.cXW7gSqiyN8afzzQiuIXa', TRUE);
 
--- Note: Passwords should be hashed. Use password_hash() in PHP.
--- For demo, use pre-hashed 'password' with bcrypt.
+-- Note: Passwords are hashed using bcrypt for security.
+-- Admin password for login: password123

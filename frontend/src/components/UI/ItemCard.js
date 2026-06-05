@@ -1,22 +1,52 @@
+import { useState, useEffect } from "react";
 import { S } from "../../constants/styles";
-import { DB } from "../../constants/db";
 import { useTheme } from "../../constants/ThemeContext";
 import { CATEGORIES } from "../../constants/categories";
 import Comments from "./Comments";
+import { claimsAPI, usersAPI } from "../../utils/api";
 
 function ItemCard({ item, currentUser, onEdit, onDelete, onClaim, onMessage, showOwner }) {
   const { theme, colors: C, statusConfig: STATUS_CONFIG } = useTheme();
-  const poster = DB.users.find(u => u.id === item.posted_by);
+  const [poster, setPoster] = useState(null);
+  const [hasClaimed, setHasClaimed] = useState(false);
+  
+  // Fetch poster user info
+  useEffect(() => {
+    const fetchPoster = async () => {
+      try {
+        const users = await usersAPI.getAll();
+        const foundPoster = users.find(u => u.id === item.posted_by);
+        setPoster(foundPoster);
+      } catch (error) {
+        console.error('Failed to fetch poster:', error);
+      }
+    };
+    if (showOwner) fetchPoster();
+  }, [item.posted_by, showOwner]);
+  
+  // Check if current user has claimed this item
+  useEffect(() => {
+    const checkClaim = async () => {
+      try {
+        const userClaims = await claimsAPI.getByUser(currentUser.id);
+        const claimed = userClaims.some(c => c.item_id === item.id);
+        setHasClaimed(claimed);
+      } catch (error) {
+        console.error('Failed to check claim status:', error);
+      }
+    };
+    checkClaim();
+  }, [currentUser.id, item.id]);
+  
   const cfg = STATUS_CONFIG[item.status];
   const category = CATEGORIES[item.category] || CATEGORIES.other;
   const isOwner = currentUser.id === item.posted_by;
-  const hasClaimed = DB.claims.some(c => c.claimer_id === currentUser.id && c.item_id === item.id);
   
   return (
     <div style={{ ...S.itemCard }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 30 }}>{item.image}</span>
+          <span style={{ fontSize: 30 }}>{item.image_emoji || '📦'}</span>
           <div>
             <div style={{ fontWeight: 600, fontSize: 15, color: C.text }}>{item.title}</div>
             <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>📍 {item.location}</div>
@@ -40,8 +70,8 @@ function ItemCard({ item, currentUser, onEdit, onDelete, onClaim, onMessage, sho
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={S.tag}>{item.date}</span>
-          {showOwner && <span style={{ fontSize: 12, color: C.textMuted }}>by {poster?.name}</span>}
+          <span style={S.tag}>{item.date_posted ? new Date(item.date_posted).toLocaleDateString() : 'Unknown date'}</span>
+          {showOwner && <span style={{ fontSize: 12, color: C.textMuted }}>by {poster?.name || 'User'}</span>}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {isOwner && item.status !== "claimed" && <>
